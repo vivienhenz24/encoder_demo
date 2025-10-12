@@ -66,14 +66,22 @@ fn load_and_normalize_audio(input_path: &Path) -> (Vec<f32>, hound::WavSpec) {
     println!("Loading clean audio from {}", input_path.display());
 
     let mut reader = WavReader::open(input_path).expect("failed to open wav file");
-    let spec = reader.spec();
+
 
     // Read and normalize samples in a single pass: i16 -> f32 in [-1.0, 1.0]
-    let normalized: Vec<f32> = reader
-    .samples::<i16>()
-    .map(|s| s.expect("failed to read sample") as f32 / SAMPLE_DIVISOR)
-    .collect();
+    let mut normalized: Vec<f32> = Vec::new();
 
+    for sample_result in reader.samples::<i16>() {
+       
+        let sample = sample_result.expect("failed to open sound file");
+        let normalized_sample = (sample as f32) / SAMPLE_DIVISOR;
+
+        normalized.push(normalized_sample);
+
+    }
+
+    let spec = reader.spec();
+    
     println!(
         "Read and normalized {} samples at {} Hz",
         normalized.len(),
@@ -97,18 +105,19 @@ fn build_bit_sequence(message: &str) -> Vec<u8> {
     bits.extend_from_slice(&PILOT_PATTERN);
 
     // 2. Length header (16 bits, MSB first)
-    bits.extend(
-        (0..16)
-            .rev()
-            .map(|shift| ((length_header >> shift) & 1) as u8),
-    );
+    for shift in (0..16).rev() {
+        bits.push(((length_header >> shift) & 1) as u8);
+    }
+
+    // Position:  15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
+    // Binary:     0  0  0  0  0  0  0  0  0  0  0  0  0  1  0  1
 
     // 3. Message payload (8 bits per byte, MSB first)
-    bits.extend(
-        message_bytes
-            .iter()
-            .flat_map(|&byte| (0..8).rev().map(move |shift| (byte >> shift) & 1)),
-    );
+    for &byte in message_bytes {
+        for shift in (0..8).rev() {
+            bits.push((byte >> shift) & 1);
+        }
+    }
 
     println!(
         "Encoding message {:?} ({} bytes)",
