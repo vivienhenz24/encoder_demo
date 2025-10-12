@@ -1,0 +1,8 @@
+[package]
+name = "msg_encoder"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hound = "3.5"
+realfft = "3.3"
