@@ -1,6 +1,5 @@
 use hound::{WavReader, WavWriter};
 use realfft::RealFftPlanner;
-use std::fs;
 use std::path::Path;
 
 // =============================================================================
@@ -21,8 +20,6 @@ const SAMPLE_DIVISOR: f32 = 32768.0;
 // Quantization multiplier for f32 -> i16 conversion
 const SAMPLE_MULTIPLIER: f32 = 32767.0;
 
-// Starting frequency bin index (skip low frequencies)
-const START_BIN: usize = 10;
 
 // Watermark embedding strength (magnitude scaling factor)
 const WATERMARK_STRENGTH: f32 = 0.15;
@@ -154,23 +151,33 @@ fn embed_watermark_fft(audio: &[f32], bits: &[u8]) -> Vec<f32> {
     // Process each frame
     for chunk in audio.chunks(frame_len) {
         // Load audio
-        buffer[..frame_len].fill(0.0);
-        buffer[..chunk.len()].copy_from_slice(chunk);
+        buffer[..frame_len].fill(0.0); //wipe clean every time becasue multiple iterations
+        buffer[..chunk.len()].copy_from_slice(chunk); //copies chunk into our empty slots
 
         // Time → Frequency
-        fft.process(&mut buffer, &mut spectrum).unwrap();
+        fft.process(&mut buffer, &mut spectrum).expect("FFT failed"); //i will explain in the decoder video
 
         // Embed bits: boost (1.15) or reduce (0.85) frequency amplitudes
-        for (i, &bit) in bits.iter().enumerate() {
-            if let Some(bin) = spectrum.get_mut(START_BIN + i) {
-                let scale = if bit == 1 { 1.15 } else { 0.85 };
-                bin.re *= scale;
-                bin.im *= scale;
-            }
+        // Produces: &0, &1, &0, &1, &0, &1, ...
+        // (references to each bit)
+        // Same as spectrum[10..129]
+        // Includes: spectrum[10], spectrum[11], spectrum[12], ..., spectrum[128]
+        // That's 119 elements
+
+        //  Left side:     Right side:
+        // &0     ←──→  bin10
+        // &1     ←──→  bin11
+        // &0     ←──→  bin12
+        // &1     ←──→  bin13
+         // ...
+        for (&bit, bin) in bits.iter().zip(&mut spectrum[10..]) {
+            let scale = if bit == 1 { 1.15 } else { 0.85 };
+            bin.re *= scale;
+            bin.im *= scale;
         }
 
         // Frequency → Time
-        ifft.process(&mut spectrum, &mut buffer).unwrap();
+        ifft.process(&mut spectrum, &mut buffer).expect("IFFT failed");
 
         // Normalize and append
         output.extend(buffer[..chunk.len()].iter().map(|x| x / frame_len as f32));
@@ -184,16 +191,10 @@ fn embed_watermark_fft(audio: &[f32], bits: &[u8]) -> Vec<f32> {
 // =============================================================================
 
 fn quantize_to_i16(encoded: Vec<f32>) -> Vec<i16> {
-    let quantized: Vec<i16> = encoded
+    encoded
         .into_iter()
-        .map(|sample| {
-            let scaled = (sample.clamp(-1.0, 1.0) * SAMPLE_MULTIPLIER).round();
-            scaled.clamp(i16::MIN as f32, i16::MAX as f32) as i16
-        })
-        .collect();
-
-    println!("Converted floating point samples back to i16");
-    quantized
+        .map(|sample| (sample.clamp(-1.0, 1.0) * 32767.0).round() as i16)
+        .collect()
 }
 
 // =============================================================================
@@ -201,17 +202,12 @@ fn quantize_to_i16(encoded: Vec<f32>) -> Vec<i16> {
 // =============================================================================
 
 fn write_wav_file(output_path: &Path, quantized: &[i16], spec: hound::WavSpec) {
-    // Ensure output directory exists
-    if let Some(parent) = output_path.parent() {
-        fs::create_dir_all(parent).expect("failed to create output directory");
-    }
-
-    // Create WAV writer and write samples
     let mut writer = WavWriter::create(output_path, spec).expect("failed to create wav writer");
+    
     for &sample in quantized {
         writer.write_sample(sample).expect("failed to write sample");
     }
+    
     writer.finalize().expect("failed to finalize wav file");
-
     println!("Wrote watermarked audio to {}", output_path.display());
 }
