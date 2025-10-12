@@ -7,7 +7,7 @@ use realfft::RealFftPlanner; // perform FFTs
 // --- Decoder configuration mirroring the encoder ---
 const PILOT_PATTERN: [u8; 8] = [0, 1, 0, 1, 0, 1, 0, 1]; // known pilot
 const LENGTH_HEADER_BITS: usize = 16; // payload length field
-const WATERMARK_FRAME_DURATION: f32 = 0.02; // frame duration
+const WATERMARK_FRAME_DURATION: f32 = 0.032; // frame duration (32ms)
 const SAMPLE_DIVISOR: f32 = 32768.0; // i16 -> f32 scale
 const START_BIN: usize = 10; // first watermark bin
 

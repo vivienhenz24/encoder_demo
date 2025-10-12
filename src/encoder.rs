@@ -49,7 +49,7 @@ pub fn encode_sample(message: &str) {
     let bits = build_bit_sequence(message);
 
     // Step 3: Embed bits into audio via FFT processing
-    let encoded = embed_watermark_fft(&normalized, &bits, spec.sample_rate);
+    let encoded = embed_watermark_fft(&normalized, &bits);
 
     // Step 4: Convert back to i16 samples
     let quantized = quantize_to_i16(encoded);
@@ -136,22 +136,25 @@ fn build_bit_sequence(message: &str) -> Vec<u8> {
 // STEP 3: Embed watermark using FFT
 // =============================================================================
 
-fn embed_watermark_fft(audio: &[f32], bits: &[u8], sample_rate: u32) -> Vec<f32> {
-    let frame_len = (sample_rate as f32 * 0.02) as usize;  // 20ms frames
-    let fft_len = frame_len.next_power_of_two();
+fn embed_watermark_fft(audio: &[f32], bits: &[u8]) -> Vec<f32> {
+    let frame_len = (8000.0 * 0.032) as usize;  // 8000 Hz * 32ms = 256 samples
 
     let mut planner = RealFftPlanner::<f32>::new();
-    let fft = planner.plan_fft_forward(fft_len);
-    let ifft = planner.plan_fft_inverse(fft_len);
+    let fft = planner.plan_fft_forward(frame_len);
+    let ifft = planner.plan_fft_inverse(frame_len);
 
-    let mut buffer = vec![0.0f32; fft_len];
+    let mut buffer = vec![0.0f32; frame_len];
+
+    //buffer (256 slots):
+    //[___|___|___|___|___| ... |___|___|___]
+
     let mut spectrum = fft.make_output_vec();
     let mut output = Vec::new();
 
     // Process each frame
     for chunk in audio.chunks(frame_len) {
-        // Load audio (zero-padded)
-        buffer[..fft_len].fill(0.0);
+        // Load audio
+        buffer[..frame_len].fill(0.0);
         buffer[..chunk.len()].copy_from_slice(chunk);
 
         // Time → Frequency
@@ -170,7 +173,7 @@ fn embed_watermark_fft(audio: &[f32], bits: &[u8], sample_rate: u32) -> Vec<f32>
         ifft.process(&mut spectrum, &mut buffer).unwrap();
 
         // Normalize and append
-        output.extend(buffer[..chunk.len()].iter().map(|x| x / fft_len as f32));
+        output.extend(buffer[..chunk.len()].iter().map(|x| x / frame_len as f32));
     }
 
     output
