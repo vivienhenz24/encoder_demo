@@ -136,79 +136,44 @@ fn build_bit_sequence(message: &str) -> Vec<u8> {
 // STEP 3: Embed watermark using FFT
 // =============================================================================
 
-fn embed_watermark_fft(normalized: &[f32], bits: &[u8], sample_rate: u32) -> Vec<f32> {
-    // Calculate frame parameters
-    let frame_len = ((sample_rate as f32 * WATERMARK_FRAME_DURATION)
-        .round()
-        .max(1.0)) as usize;
-    let fft_len = frame_len.next_power_of_two().max(2);
+fn embed_watermark_fft(audio: &[f32], bits: &[u8], sample_rate: u32) -> Vec<f32> {
+    let frame_len = (sample_rate as f32 * 0.02) as usize;  // 20ms frames
+    let fft_len = frame_len.next_power_of_two();
 
-    // Setup FFT planner and plans
     let mut planner = RealFftPlanner::<f32>::new();
-    let forward = planner.plan_fft_forward(fft_len);
-    let inverse = planner.plan_fft_inverse(fft_len);
+    let fft = planner.plan_fft_forward(fft_len);
+    let ifft = planner.plan_fft_inverse(fft_len);
 
-    // Allocate reusable buffers
-    let mut scratch_forward = forward.make_scratch_vec();
-    let mut scratch_inverse = inverse.make_scratch_vec();
     let mut buffer = vec![0.0f32; fft_len];
-    let mut spectrum = forward.make_output_vec();
-    let mut reconstructed = inverse.make_output_vec();
-
-    let mut encoded = Vec::with_capacity(normalized.len());
-    let mut frame_count = 0;
+    let mut spectrum = fft.make_output_vec();
+    let mut output = Vec::new();
 
     // Process each frame
-    let mut offset = 0;
-    while offset < normalized.len() {
-        let end = (offset + frame_len).min(normalized.len());
-        let chunk = &normalized[offset..end];
-
-        // Prepare FFT input
-        buffer.fill(0.0);
+    for chunk in audio.chunks(frame_len) {
+        // Load audio (zero-padded)
+        buffer[..fft_len].fill(0.0);
         buffer[..chunk.len()].copy_from_slice(chunk);
 
-        // Forward FFT: time domain -> frequency domain
-        forward
-            .process_with_scratch(&mut buffer, &mut spectrum, &mut scratch_forward)
-            .expect("FFT failed");
+        // Time → Frequency
+        fft.process(&mut buffer, &mut spectrum).unwrap();
 
-        // Embed bits by scaling frequency bins
-        let usable = spectrum.len().saturating_sub(START_BIN);
-        let bits_to_encode = bits.len().min(usable);
-
-        for bit_idx in 0..bits_to_encode {
-            let bin = START_BIN + bit_idx;
-            let bit = bits[bit_idx];
-            let scale = if bit == 1 {
-                1.0 + WATERMARK_STRENGTH
-            } else {
-                1.0 - WATERMARK_STRENGTH
-            };
-
-            spectrum[bin].re *= scale;
-            spectrum[bin].im *= scale;
+        // Embed bits: boost (1.15) or reduce (0.85) frequency amplitudes
+        for (i, &bit) in bits.iter().enumerate() {
+            if let Some(bin) = spectrum.get_mut(START_BIN + i) {
+                let scale = if bit == 1 { 1.15 } else { 0.85 };
+                bin.re *= scale;
+                bin.im *= scale;
+            }
         }
 
-        // Inverse FFT: frequency domain -> time domain
-        inverse
-            .process_with_scratch(&mut spectrum, &mut reconstructed, &mut scratch_inverse)
-            .expect("IFFT failed");
+        // Frequency → Time
+        ifft.process(&mut spectrum, &mut buffer).unwrap();
 
-        // Normalize and append to output
-        let fft_scale = fft_len as f32;
-        encoded.extend(reconstructed[..chunk.len()].iter().map(|x| x / fft_scale));
-
-        offset += chunk.len();
-        frame_count += 1;
+        // Normalize and append
+        output.extend(buffer[..chunk.len()].iter().map(|x| x / fft_len as f32));
     }
 
-    println!(
-        "Processed {} frames ({} samples per frame, FFT len {})",
-        frame_count, frame_len, fft_len
-    );
-
-    encoded
+    output
 }
 
 // =============================================================================
