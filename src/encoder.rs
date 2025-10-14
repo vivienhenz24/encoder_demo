@@ -10,19 +10,13 @@ use std::path::Path;
 // Alternating 0s and 1s give us clear separation between high and low magnitudes
 pub const PILOT_PATTERN: [u8; 8] = [0, 1, 0, 1, 0, 1, 0, 1];
 
-// Duration of each audio frame we process (in seconds)
-// 20ms is standard for speech processing - short enough to be locally stationary
-pub const WATERMARK_FRAME_DURATION: f32 = 0.02;
+
 
 // Sample normalization divisor for i16 -> f32 conversion
 const SAMPLE_DIVISOR: f32 = 32768.0;
 
-// Quantization multiplier for f32 -> i16 conversion
 const SAMPLE_MULTIPLIER: f32 = 32767.0;
 
-
-// Watermark embedding strength (magnitude scaling factor)
-const WATERMARK_STRENGTH: f32 = 0.15;
 
 // Input and output file paths
 const INPUT_PATH: &str = concat!(
