@@ -15,7 +15,6 @@ pub const PILOT_PATTERN: [u8; 8] = [0, 1, 0, 1, 0, 1, 0, 1];
 // Sample normalization divisor for i16 -> f32 conversion
 const SAMPLE_DIVISOR: f32 = 32768.0;
 
-const SAMPLE_MULTIPLIER: f32 = 32767.0;
 
 
 // Input and output file paths
@@ -85,6 +84,7 @@ fn load_and_normalize_audio(input_path: &Path) -> (Vec<f32>, hound::WavSpec) {
 // =============================================================================
 // STEP 2: Build bit sequence (pilot + length + message)
 // =============================================================================
+
 
 fn build_bit_sequence(message: &str) -> Vec<u8> {
     let message_bytes = message.as_bytes();
