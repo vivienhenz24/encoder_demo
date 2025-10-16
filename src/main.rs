@@ -17,7 +17,7 @@ fn main() {
     match args[1].as_str() {
         // If user wants to encode the message
         "encode" => {
-            encoder::encode_sample("ayande");
+            encoder::encode_sample("hi");
         }
 
         // If user wants to decode a watermark

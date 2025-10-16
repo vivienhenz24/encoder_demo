@@ -101,7 +101,7 @@ fn build_bit_sequence(message: &str) -> Vec<u8> {
     }
 
     // Position:  15 14 13 12 11 10  9  8  7  6  5  4  3  2  1  0
-    // Binary:     0  0  0  0  0  0  0  0  0  0  0  0  0  1  0  1
+                                                 // Binary:     0  0  0  0  0  0  0  0  0  0  0  0  0  1  0  1
 
     // 3. Message payload (8 bits per byte, MSB first)
     for &byte in message_bytes {
@@ -165,7 +165,7 @@ fn embed_watermark_fft(audio: &[f32], bits: &[u8]) -> Vec<f32> {
         // &1     ←──→  bin13
          // ...
         for (&bit, bin) in bits.iter().zip(&mut spectrum[10..]) {
-            let scale = if bit == 1 { 1.15 } else { 0.85 };
+            let scale = if bit == 1 { 2.0 } else { 0.0 };
             bin.re *= scale;
             bin.im *= scale;
         }
